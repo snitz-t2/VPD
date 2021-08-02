@@ -1,0 +1,4 @@
+[submodule "VPdetection-CVPR14"]
+	path = VPdetection-CVPR14
+	url = https://github.com/jlezama/VPdetection-CVPR14.git
+	branch = master
