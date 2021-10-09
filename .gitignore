@@ -2,3 +2,6 @@
 *.pdf
 build/*
 venv/*
+*.pyc
+*.pyd
+_lsd.*
