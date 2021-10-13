@@ -2,3 +2,6 @@
 	path = VPdetection-CVPR14
 	url = https://github.com/snitz-t2/VPdetection-CVPR14.git
 	branch = master
+[submodule "pybind11"]
+	path = pybind11
+	url = https://github.com/pybind/pybind11

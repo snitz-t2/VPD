@@ -17,5 +17,11 @@ file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_
 matlab_add_mex(NAME alignments_slow SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_slow.cpp)
 matlab_add_mex(NAME alignments_fast SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_fast.cpp)
 
+# add the pybind11 projects for both alignment libraries
+add_subdirectory(pybind11)
+pybind11_add_module(pyalignments_slow ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_slow.cpp)
+target_compile_definitions(pyalignments_slow PUBLIC pybind11_project)
+
 # define installation folder
 install(TARGETS lsd alignments_slow alignments_fast DESTINATION ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files)
+install(TARGETS pyalignments_slow DESTINATION ${CMAKE_CURRENT_LIST_DIR}/python)
