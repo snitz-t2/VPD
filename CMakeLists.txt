@@ -14,8 +14,8 @@ file(GLOB_RECURSE INCLUDE_FILES ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex
 file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lib/*.c)
 
 # add the mex projects for both alignment libraries
-matlab_add_mex(NAME alignments_slow SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_slow.c)
-matlab_add_mex(NAME alignments_fast SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_fast.c)
+matlab_add_mex(NAME alignments_slow SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_slow.cpp)
+matlab_add_mex(NAME alignments_fast SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_fast.cpp)
 
 # define installation folder
 install(TARGETS lsd alignments_slow alignments_fast DESTINATION ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files)
