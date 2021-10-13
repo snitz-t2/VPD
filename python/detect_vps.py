@@ -2,13 +2,14 @@ import os
 import cv2
 import numpy as np
 from .LSD import LSDWrapper
-from .detect_vps_params import Params
+from .detect_vps_params import DefaultParams, RuntimeParams
 
 
 class VanishingPointDetector:
     def __init__(self):
         # 1) declare default parameters
-        self.params = Params()
+        self.default_params = DefaultParams()
+        self.runtime_params = RuntimeParams()
 
         # 2) initialize wrappers
         self._lsd = LSDWrapper()
@@ -47,11 +48,14 @@ class VanishingPointDetector:
         assert isinstance(folder_out, str) and os.path.isdir(folder_out)
         assert isinstance(plot, bool) and isinstance(print_output, bool)
 
-        # 1) read image
+        # 1) read image (and update relevant runtime parameters)
+        self.runtime_params.img_in = img_in
         img = cv2.imread(img_in, -1)
+        self.runtime_params.H, self.runtime_params.W = img.shape
 
-        # 2) calculate final LENGTH_THRESHOLD based on image size and default LENGTH_THRESHOLD in params
-        LENGTH_THRESHOLD = np.sqrt(img.shape[0] + img.shape[1]) / self.params.LENGTH_THRESHOLD
+        # 2) calculate final LENGTH_THRESHOLD based on image size and LENGTH_THRESHOLD coefficients in default params
+        self.runtime_params.SEGMENT_LENGTH_THRESHOLD = \
+            np.sqrt(self.runtime_params.H + self.runtime_params.W) / self.default_params.SEGMENT_LENGTH_THRESHOLD_COEFF
 
         # 3) get line segments using LSD
         lines = self._lsd.run_lsd(img)
