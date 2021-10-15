@@ -121,6 +121,7 @@ class RuntimeParams(Params):
         self._plot_graphs = False
         self._print_results = False
         self._FOCAL_RATIO = -np.inf
+        self._ANG = -np.inf
 
     # declare properties for regular params, for which the only operation to do in the setter is check type correctness
     W = _create_property('_W')
@@ -129,5 +130,6 @@ class RuntimeParams(Params):
     SEGMENT_LENGTH_THRESHOLD = _create_property('_SEGMENT_LENGTH_THRESHOLD')
     img_in = _create_property('_img_in')
     folder_out = _create_property('_folder_out')
-    plot_graphs = _create_property('plot_graphs')
-    print_results = _create_property('print_results')
+    plot_graphs = _create_property('_plot_graphs')
+    print_results = _create_property('_print_results')
+    ANG = _create_property('_ANG')
