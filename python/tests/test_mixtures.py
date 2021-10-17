@@ -94,8 +94,12 @@ class TestMixtures(object):
         points_in = np.loadtxt(join(data_folder, 'test__mixtures__points_in.txt'), delimiter=',')
 
         # 1) run mixtures algorithm
-        GMM_Ks = np.array([30, 30, 30])
-        detections = run_mixtures(points_in, GMM_Ks)
+        GMM_Ks = np.array([30, 30, 30], dtype=np.int8)
+        all_bestpairs = run_mixtures(points_in, GMM_Ks)
+
+        # 2) check returned shape validity (since `mixtures4` uses a random generator, it is hard to validate
+        #    `run_mixtures`, which is supposed to use it multiple times with different random permutations).
+        assert all_bestpairs.shape[1] == 2
 
         print("OK")
 

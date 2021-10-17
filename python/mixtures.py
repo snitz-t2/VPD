@@ -14,17 +14,19 @@ def run_mixtures(points: np.ndarray, Ks: np.ndarray) -> np.ndarray:
     :return: all_bestpairs - An Mx2 numpy array, where `M` is the number of aligning segment endpoints detected by
                              the gaussian mixtures model.
     """
-    # TODO
+    # select a unique set of points from all points by rounding the loacations
     unique_points = np.unique(np.round(points).astype(float), axis=0)
 
-    all_bestpairs = np.empty((0, 2), dtype=np.float64)
+    # use a gaussian mixtures model to cluster all unique points into
+    all_bestpairs = np.empty((0, 4), dtype=np.float64)
     for K in Ks:
         bestK, bestpp, bestmu, bestcov, dl, countf, bestpairs = mixtures4(unique_points.T,
                                                                           kmin=max(2, K-7), kmax=K, regularize=0.,
-                                                                          th=1e-4, covoption=0)
+                                                                          th=1e-4, covoption=0, randindex=None)
         all_bestpairs = np.append(all_bestpairs, bestpairs, axis=0)
 
-    # TODO: re-accomodate results
+    # re-accomodate results
+    all_bestpairs = np.vstack([all_bestpairs[:, :2], all_bestpairs[:, 2:]])
 
     return all_bestpairs
 
@@ -72,8 +74,8 @@ def mixtures4(y: np.ndarray,
     """
     # 0) handle input:
     assert (isinstance(y, np.ndarray))
-    assert (isinstance(kmin, int) and kmin > 0)
-    assert (isinstance(kmax, int) and kmax > 0 and kmax > kmin)
+    assert ((isinstance(kmin, int) or np.issubdtype(kmin, np.integer)) and kmin > 0)
+    assert ((isinstance(kmax, int) or np.issubdtype(kmax, np.integer)) and kmax > 0 and kmax > kmin)
     assert (isinstance(regularize, float))
     assert (isinstance(th, float))
     assert (isinstance(covoption, int))
