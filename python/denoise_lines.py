@@ -1,7 +1,6 @@
 import numpy as np
 from copy import deepcopy
-import pyalignment_slow
-import pyalignment_fast
+from find_detections import find_detections
 from detect_vps_params import DefaultParams, RuntimeParams
 
 
@@ -24,14 +23,14 @@ def denoise_lines(lines, default_params, runtime_params):
 
     # 1) calculate the length of each line (sqrt(dx^2 + dy^2))
     length_x_y = np.vstack([lines[:, 2] - lines[:, 0], lines[:, 3] - lines[:, 1]]).T
-    lengths = np.sqrt(np.sum(length_x_y ** 2, axis=1))[:, np.newaxis]
+    lengths = np.sqrt(np.sum(length_x_y ** 2, axis=1))
 
     # 2) find the angle of each line (in degrees)
-    angles = np.rad2deg(np.arctan((lines[:, 3] - lines[:, 1]) / (lines[:, 2] - lines[:, 0])))[:, np.newaxis]
+    angles = np.rad2deg(np.arctan((lines[:, 3] - lines[:, 1]) / (lines[:, 2] - lines[:, 0])))
 
     # 3) dividing the set of lines into short and long lines
     # 3.1) find indices of long lines, which do not need denoising
-    z_large = lengths > runtime_params.SEGMENT_LENGTH_THRESHOLD
+    z_large = (lengths > runtime_params.SEGMENT_LENGTH_THRESHOLD)
 
     # 3.2) find indices of short lines, which need denoising
     z_short = np.bitwise_not(z_large)
@@ -59,50 +58,36 @@ def denoise_lines(lines, default_params, runtime_params):
         # 4.3) save angle of orientation to runtime parameters in order to pass it down the call stack
         runtime_params.ANG = ANG
 
-        # 4.4) detect alignments of short lines
+        # 4.4) detect alignments of short line segments
         if len(z_short_20) > 0:
             detections = find_endpoints_detections(lines[z_short_20], default_params, runtime_params)
-            all_detections = np.append(all_detections, detections, axis=0)
+            all_detections = np.append(all_detections, detections[:, :4], axis=0)
 
-        # 4.5) detect alignments of large lines
+        # 4.5) detect alignments of long line segments
         if len(z_large_20) > 0:
             detections = find_endpoints_detections(lines[z_large_20], default_params, runtime_params)
-            all_detections = np.append(all_detections, detections, axis=0)
+            all_detections = np.append(all_detections, detections[:, :4], axis=0)
 
-    # 5) TODO
+    # 5) fix the inversion of y coordinated of the points done in `find_endpoints_detections`.
+    #    for some reason the author called this step `Invertion w.r.t H for ease of plotting in Matlab`.
     lines_short_denoised = deepcopy(all_detections)
+    if lines_short_denoised.size != 0:
+        lines_short_denoised[:, 1::2] = runtime_params.H - lines_short_denoised[:, 1::2]
+
+    # 6) append the denoised lines to the large lines detected
+    lines_out = np.vstack([lines[z_large], lines_short_denoised])
+
+    return lines_out, lines_short_denoised
 
 
 def find_endpoints_detections(lines, default_params, runtime_params):
     # convert lines to point segments (y axis inverted)
     H = runtime_params.H
-    point_segments = np.hstack([lines[:, 0], lines[:, 2], H - lines[:, 1], H - lines[:, 2]])
+    point_segments = np.vstack([np.hstack([lines[:, 0], lines[:, 2]]),
+                                np.hstack([H - lines[:, 1], H - lines[:, 3]])]).T
 
-    # TODO: check wtf is params.endpoints in MATLAB
+    runtime_params.endpoints = True
+    detections, _, _ = find_detections(point_segments, default_params)
+    runtime_params.endpoints = False
 
-    # decide if acceleration is needed
-    USE_ACCELERATION = False
-    if len(point_segments) > default_params.MAX_POINTS_ACCELERATION and default_params.ACCELERATION:
-        print('- USE ACCELERATED VERSION -')
-        USE_ACCELERATION = True
-
-    # normalize segment endpoints
-    M = np.max(point_segments)
-    m = np.min(point_segments)
-
-    # this version of the alignment detector expects a 512x512 domain
-    point_segments_normed = ((point_segments - m) / (M - m)) * 512.
-
-    # run alignment detections
-    if USE_ACCELERATION:
-        candidates = run_mixtures(point_segments_normed, default_params.GMM_Ks, '')
-        segment_detections = pyalignment_fast.detect_alignments_fast(point_segments_normed)
-    else:
-        segment_detections = pyalignment_slow.detect_alignments_slow(point_segments_normed)
-
-    # convert detections to line coordinates
-    line_detections = (segment_detections / 512.) * (M - m) + m
-
-    return line_detections
-
-
+    return detections

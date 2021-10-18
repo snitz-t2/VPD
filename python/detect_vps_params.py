@@ -71,42 +71,42 @@ class DefaultParams(Params):
     # or that changing them automatically induces a change in other parameters
     @property
     def ppd(self):
-        return self.__ppd
+        return self._ppd
 
     @ppd.setter
     def ppd(self, val):
         assert isinstance(val, np.ndarray)
         assert val.dtype == float
         assert len(val) == 2
-        self.__ppd = val
+        self._ppd = val
 
     @property
     def MANHATTAN(self):
-        return self.__MANHATTAN
+        return self._MANHATTAN
 
     @MANHATTAN.setter
     def MANHATTAN(self, setting: bool):
         assert isinstance(setting, bool)
-        self.__MANHATTAN = setting
-        if self.__MANHATTAN:
-            self.__ORTHOGONALITY_THRESHOLD = np.cos(87.5 * (np.pi / 180))  # (\gamma_S)
+        self._MANHATTAN = setting
+        if self._MANHATTAN:
+            self._ORTHOGONALITY_THRESHOLD = np.cos(87.5 * (np.pi / 180))  # (\gamma_S)
         else:
-            self.__ORTHOGONALITY_THRESHOLD = np.cos(77.5 * (np.pi / 180))  # (\gamma_R)
+            self._ORTHOGONALITY_THRESHOLD = np.cos(77.5 * (np.pi / 180))  # (\gamma_R)
 
     @property
     def ORTHOGONALITY_THRESHOLD(self):
-        return self.__ORTHOGONALITY_THRESHOLD
+        return self._ORTHOGONALITY_THRESHOLD
 
     @property
     def GMM_Ks(self):
-        return self.__GMM_Ks
+        return self._GMM_Ks
 
     @GMM_Ks.setter
     def GMM_Ks(self, val):
         assert isinstance(val, np.ndarray)
         assert val.dtype == int
         assert len(val) == 3
-        self.__GMM_Ks = val
+        self._GMM_Ks = val
 
 
 class RuntimeParams(Params):
@@ -122,6 +122,7 @@ class RuntimeParams(Params):
         self._print_results = False
         self._FOCAL_RATIO = -np.inf
         self._ANG = -np.inf
+        self._endpoints = False
 
     # declare properties for regular params, for which the only operation to do in the setter is check type correctness
     W = _create_property('_W')
@@ -133,3 +134,4 @@ class RuntimeParams(Params):
     plot_graphs = _create_property('_plot_graphs')
     print_results = _create_property('_print_results')
     ANG = _create_property('_ANG')
+    endpoints = _create_property('_endpoints')

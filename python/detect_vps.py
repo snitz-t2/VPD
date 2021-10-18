@@ -1,8 +1,9 @@
 import os
 import cv2
 import numpy as np
-from .LSD import LSDWrapper
-from .detect_vps_params import DefaultParams, RuntimeParams
+from LSD import LSDWrapper
+from denoise_lines import denoise_lines
+from detect_vps_params import DefaultParams, RuntimeParams
 
 
 class VanishingPointDetector:
@@ -58,6 +59,9 @@ class VanishingPointDetector:
             np.sqrt(self.runtime_params.H + self.runtime_params.W) / self.default_params.SEGMENT_LENGTH_THRESHOLD_COEFF
 
         # 3) get line segments using LSD
-        lines = self._lsd.run_lsd(img)
+        lines_lsd = self._lsd.run_lsd(img)
+
+        # 4) denoise lines
+        lines, line_endpoints = denoise_lines(lines_lsd, self.default_params, self.runtime_params)
 
 

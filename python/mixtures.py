@@ -161,7 +161,7 @@ def mixtures4(y: np.ndarray,
             comp = 0
             while comp <= (k - 1):
                 # 13.1.1) we start with the M step. first, we compute a normalized indicator function
-                indic = np.tile(estpp.T, [1, 418]) * semi_indic
+                indic = np.tile(estpp.T, [1, semi_indic.shape[1]]) * semi_indic
 
                 # 13.1.2) normalize indicator array
                 normindic = indic / (realmin + np.tile(np.sum(indic, axis=0)[np.newaxis, :], [k, 1]))
