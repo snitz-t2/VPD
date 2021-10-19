@@ -20,7 +20,7 @@ class TestVanishingPointDetector(object):
         lines_homog_out = np.loadtxt(join(data_folder, 'test__line_to_homogeneous__lines_homog_out.txt'), delimiter=',')
 
         # 1) call the function
-        lines_homog = VanishingPointDetector.line_to_homogeneous(lines_in)
+        lines_homog = VanishingPointDetector._line_to_homogeneous(lines_in)
 
         # 2) assert correctness
         assert np.all(np.abs(lines_homog - lines_homog_out) < 1e-9)
@@ -36,7 +36,7 @@ class TestVanishingPointDetector(object):
         thresh_in = 1e-2
 
         # 1) call the function
-        clus = VanishingPointDetector.aggclus(X_in, thresh_in)
+        clus = VanishingPointDetector._aggclus(X_in, thresh_in)
 
         # 2) assert correctness
         assert len(clus) == len(clus_out)

@@ -119,7 +119,7 @@ class RuntimeParams(Params):
         self._img_in = ''
         self._folder_out = ''
         self._plot_graphs = False
-        self._print_results = False
+        self._print_results = False     # TODO: remove or modify, it is not used in MATLAB at all...
         self._FOCAL_RATIO = -np.inf
         self._ANG = -np.inf
         self._endpoints = False

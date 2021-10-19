@@ -45,14 +45,13 @@ class VanishingPointDetector:
         :param manhattan:        boolean variable used to determine if the Manhattan-world hypothesis is assumed.
         :param acceleration:     boolean variable used to determine if acceleration using Figueiredo and Jain GMM
                                  algorithm should be used.
-        :param focal_ratio:      ratio between the focal lenght and captor width
+        :param focal_ratio:      ratio between the focal length and captor width
         :param plot:             TODO: understand and describe
         :param print_output:            TODO: understand and describe
         :return:
                 - horizon_line: estimated horizon line in image coordinates
                 - vpimg: esitmated vanishing points in image coordinates
         """
-        pass
         # 0) Handle input
         assert isinstance(img_in, str) and os.path.isfile(img_in)
         assert isinstance(folder_out, str) and os.path.isdir(folder_out)
@@ -74,6 +73,8 @@ class VanishingPointDetector:
         lines, line_endpoints = denoise_lines(lines_lsd, self.default_params, self.runtime_params)
 
         # 5) draw detected lines
+        if self.runtime_params.plot_graphs:
+            self._draw_lines(lines, line_endpoints)
 
         # 6) convert lines to PCLines
         points_straight, points_twisted = self._convert_to_PClines(lines)
@@ -93,6 +94,9 @@ class VanishingPointDetector:
         mvp_all, NFAs = self._remove_duplicates(mvp_all, NFAs)
 
         # 11) draw preliminary detections
+        if self.runtime_params.plot_graphs:
+            img2 = self._draw_segments(img, mvp_all, lines_lsd)
+            cv2.imwrite(os.path.join(self.runtime_params.folder_out, 'vps_raw.png'), img2)
 
         # 12) compute horizon line
         if mvp_all.size > 0:
@@ -106,12 +110,16 @@ class VanishingPointDetector:
             print("No vanishing points found")
 
         # 13) draw dual spaces
+        if self.runtime_params.plot_graphs:
+            self._draw_dual_spaces(points_straight, detections_straight, 'straight', vpimg)
+            self._draw_dual_spaces(points_twisted, detections_twisted, 'twisted', vpimg)
 
         # 14) finish algorithm
         print("Finished")
         return horizon_line, vpimg
 
-    def _draw_lines(self, lines1: np.ndarray, lines2: np.ndarray) -> None:  #TODO: finish
+    def _draw_lines(self, lines1: np.ndarray, lines2: np.ndarray) -> None:
+        raise NotImplementedError
         H = self.runtime_params.H
         W = self.runtime_params.W
         LW = 1.5
@@ -126,6 +134,12 @@ class VanishingPointDetector:
         for ii in range(len(lines2)):
             l = lines2[ii, :]
             ax2d.plot(l[::2], H - l[1::2], 'r', linewidth=LW)
+
+    def _draw_segments(self, img: np.ndarray, mvp_all: np.ndarray, lines_lsd: np.ndarray) -> None:
+        raise NotImplementedError
+
+    def _draw_dual_spaces(self, points, detections, space, vpimg):
+        raise NotImplementedError
 
     def _convert_to_PClines(self, lines: np.ndarray) -> tuple:
         """
@@ -274,7 +288,7 @@ class VanishingPointDetector:
         # 4) obtain a refined VP estimate from sub-cluster z2
         lengths = np.sum((lines[:, 2] - lines[:, 2:]) ** 2, axis=1)
         weights = lengths / np.max(lengths)
-        lis = self.line_to_homogeneous(lines)
+        lis = self._line_to_homogeneous(lines)
 
         Is = np.diag([1, 1, 0])
 
@@ -311,7 +325,7 @@ class VanishingPointDetector:
         :return:
         """
         THRESHOLD = self.default_params.DUPLICATES_THRESHOLD
-        clus = self.aggclus(vps.T, THRESHOLD)
+        clus = self._aggclus(vps.T, THRESHOLD)
 
         final_vps = np.empty((2, 0))
         final_NFAs = np.array([])
@@ -328,9 +342,42 @@ class VanishingPointDetector:
 
         return final_vps, final_NFAs
 
+    def _compute_horizon_line_manhattan(self, mvp_all, NFAs, lines_lsd):
+        """
+        computes horizontal line from vps and using the NFA values to apply orthogonality constraints.
+        saves data to output image and output text file.
+        :param mvp_all:
+        :param NFAs:
+        :param lines_lsd:
+        :return:
+        """
+        raise NotImplementedError
+        H = self.runtime_params.H
+        W = self.runtime_params.W
+
+        pp = np.array([W, H]) / self.default_params.ppd
+        FOCAL_RATIO = self.runtime_params.FOCAL_RATIO
+
+        my_vps = self._image_to_gaussian_sphere(mvp_all, W, H, FOCAL_RATIO, pp)
+
+        my_vps[np.isnan(my_vps)] = 1
+
+        # impose orthogonality
+        my_orthogonal_vps = orthogonal_triplet(my_vps, NFAs, self.default_params.ORTHOGONALITY_THRESHOLD)
+
+    def _compute_horizon_line_non_manhattan(self, mvp_all, NFAs, lines_lsd):
+        """
+        Computes the horizon line when the Manhattan-world hypothesis cannot be assumed.
+        :param mvp_all:
+        :param NFAs:
+        :param lines_lsd:
+        :return:
+        """
+        raise NotImplementedError
+
 
     @staticmethod
-    def aggclus(X: np.ndarray, THRESHOLD: float):
+    def _aggclus(X: np.ndarray, THRESHOLD: float) -> list:
         """
         agglomerative clustering using single link.
         TODO: finish doc
@@ -380,11 +427,8 @@ class VanishingPointDetector:
 
         return clus
 
-
-
-
     @staticmethod
-    def line_to_homogeneous(l: np.ndarray) -> np.ndarray:
+    def _line_to_homogeneous(l: np.ndarray) -> np.ndarray:
         """
         converts lines in x1 y1 x2 y2 format to homogeneous coordinates.
         :param l:
@@ -403,6 +447,34 @@ class VanishingPointDetector:
 
         L = np.vstack([a, b, c]).T
         return L
+
+    @staticmethod
+    def _image_to_gaussian_sphere(vpsimg: np.ndarray, W: int, H: int,
+                                  FOCAL_RATIO: float, pp: np.ndarray) -> np.ndarray:
+        vp = np.vstack([vpsimg[0, :] - pp[0],
+                       (H - vpsimg[1, :]) - (H - pp[1]),
+                       np.ones(vpsimg[1, :].shape) * W * FOCAL_RATIO])
+
+        vp /= np.tile(np.sqrt(np.sum(vp ** 2)), [3, 1])
+
+        return vp
+
+    @staticmethod
+    def _orthogonal_triplet(my_vps: np.ndarray, NFAs: np.ndarray, ORTHOGONALITY_THRESHOLD: float):
+        """
+        Returns most significant orthogonal triplet.
+        Identifies and removes duplicate detections, keeping only most significant ones.
+        :param my_vps:
+        :param NFAs:
+        :param ORTHOGONALITY_THRESHOLD:
+        :return:
+        """
+        N = my_vps.shape[1]
+        raise NotImplementedError
+
+    @staticmethod
+    def _drawline(p1:np.ndarray, p2:np.ndarray, W: int, H: int) -> tuple:
+        raise NotImplementedError
 
 
 
