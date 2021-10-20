@@ -244,7 +244,7 @@ class VanishingPointDetector:
             vp = self._refine_vp(lines_lsd, vp)
             mvp_refined[ii, :] = vp
 
-        return mvp_refined
+        return mvp_refined.T
 
     def _refine_vp(self, lines, vp):
         """
@@ -272,31 +272,31 @@ class VanishingPointDetector:
         O = np.ones((L, 1))
         vpmat = np.tile(vp, [L, 1])
 
-        VP = np.cross(np.hstack([mp, O]).T, np.hstack([vpmat, O]).T).T
+        VP = np.cross(np.hstack([mp, O]), np.hstack([vpmat, O]))
 
-        VP3 = np.tile(VP[:, 2], [1, 3])
-        VP = VP / VP3
+        VP3 = np.tile(VP[:, 2][:, np.newaxis], [1, 3])
+        VP /= VP3
 
         a = VP[:, 0]
         b = VP[:, 1]
 
         # 3) get angle between lines
         angle = np.abs(np.arctan(-a / b) - np.arctan((lines[:, 3] - lines[:, 1]) / (lines[:, 2] - lines[:, 0])))
-        angle = np.min(angle, np.pi - angle)
+        angle = np.minimum(angle, np.pi - angle)
         z2 = angle < np.deg2rad(THRESHOLD)
 
         # 4) obtain a refined VP estimate from sub-cluster z2
-        lengths = np.sum((lines[:, 2] - lines[:, 2:]) ** 2, axis=1)
+        lengths = np.sum((lines[:, :2] - lines[:, 2:]) ** 2, axis=1)
         weights = lengths / np.max(lengths)
         lis = self._line_to_homogeneous(lines)
 
         Is = np.diag([1, 1, 0])
 
         l2 = lis[z2, :].T
-        w2 = weights[z2]
+        w2 = weights[z2][:, np.newaxis]
         w2 = np.tile(w2, [1, 3]).T
 
-        b = np.dot(Is.T @ l2, l2).T
+        b = np.sum((Is.T @ l2) * l2, axis=0)[:, np.newaxis]
         b = np.tile(b, [1, 3]).T
         Q = (w2 * l2 / b) @ l2.T
 
@@ -305,7 +305,7 @@ class VanishingPointDetector:
 
         vp = null_space(A)
 
-        vp = (vp[:2, 0] / vp[2, 1]).T
+        vp = (vp[:2, 0] / vp[2, 0])
 
         # -------------------------- end of `refine_vp_iteration` function in MATLAB -----------------------------------
 

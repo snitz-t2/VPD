@@ -62,6 +62,28 @@ class TestVanishingPointDetector(object):
         assert np.all(np.abs(final_vps - vps_in) < 1e-12)
         assert np.all(np.abs(final_NFAs - NFAs_in) < 1e-12)
 
+    def test__refine_detections(self):
+        # 0) load and declare input and output parameters
+        lines_lsd_in = np.loadtxt(join(data_folder, 'test__denoise_lines__lines_in.txt'), delimiter=',')
+        mvp_all_in = np.array([[796.383918927249, 366.693922105435, -966.113269407856, -1132.22448651142,
+                                795.852350268115, 421.996457739350,	804.939758522107, -1265.43119505193],
+                               [268.714618008844, 13670.9315876730,	267.212475921965, 260.200906039884,
+                                268.073415950411, 12626.0039197987,	265.800887546446, 252.992107462694]])
+        mvp_all_out = np.array([[800.894333585489, 366.693922105435, -963.996965933382, -1134.13678498561,
+                                 800.663214555392, 421.996457739350, 803.936158985557, -1295.67597597918],
+                                [268.808002590910, 13670.9315876730, 266.437020037757, 268.800391684926,
+                                 268.817157382630, 12626.0039197987, 267.677822413570, 261.116432351162]])
+        vpd = VanishingPointDetector()
+        vpd.runtime_params.H = 612
+        vpd.runtime_params.W = 816
+
+        # 1) run function
+        mvp_all = vpd._refine_detections(mvp_all_in, lines_lsd_in)
+
+        # 2) compare results
+        assert np.all(np.abs(mvp_all - mvp_all_out) < 1e-8)
+
+
     def test__detect_vps(self):
 
         # 0) define input data (image)
