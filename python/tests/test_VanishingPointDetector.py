@@ -13,7 +13,7 @@ sys.path.append(dirname(my_dir))
 from detect_vps import VanishingPointDetector
 
 
-class TestVanishingPointDetector(object):
+class TestStaticMethods(object):
     def test__line_to_homogeneous(self):
         # 0) load input data and output data
         lines_in = np.loadtxt(join(data_folder, 'test__denoise_lines__lines_in.txt'), delimiter=',')
@@ -66,6 +66,52 @@ class TestVanishingPointDetector(object):
         # 2) compare results
         assert np.all(np.abs(ortho_vps - ortho_vps_out) < 1e-12)
 
+    def test__gaussian_sphere_to_image(self):
+        # 0) load and declare input and output params
+        vp_in = np.array([[0.406650117964224, 0.00152377484175155, 0.913497301676117],
+                          [0.0385266564047684, -0.996842908935405, -0.0309094305746012],
+                          [0.912771262861595, 0.0793844633126079, -0.405668937598143]])
+        W_in = int(816)
+        H_in = int(612)
+        pp_in = np.array([408, 306])
+        FOCAL_RATIO_in = 1.08000000000000
+        vpimg_out = np.array([[800.620397399444, 424.916059345904, -1576.49234685701],
+                              [268.802540857881, 11372.3684319079, 238.851987292731]])
+
+        # 1) run the function
+        vpimg = VanishingPointDetector._gaussian_sphere_to_image(vp_in, W_in, H_in, FOCAL_RATIO_in, pp_in)
+
+        # 2) compare results
+        assert np.all(np.abs(vpimg - vpimg_out) < 1e-10)
+
+    def test__image_to_gaussian_sphere(self):
+        # 0) load and declare input and output params
+        vpsimg_in = np.array([[800.894333585489, 361.573133786433, 240.989352828468, -966.059972074617,
+                               800.663214555392, 462.265788430872, -963.037213448478],
+                              [268.808002590910, 9775.53689835373, 18673.3155510477, 265.394015935807,
+                               268.817157382630, 11325.0085875853, 265.724434539945]])
+        W_in = int(816)
+        H_in = int(612)
+        pp_in = np.array([408, 306])
+        FOCAL_RATIO_in = 1.08000000000000
+        vpimg_out = np.array([[800.620397399444, 424.916059345904, -1576.49234685701],
+                              [268.802540857881, 11372.3684319079, 238.851987292731]])
+        vp_out = np.array([[0.406886972554092, -0.00488160719312791, -0.00908199431769545, -0.841487349025937,
+                            0.406687367833829, 0.00490900871060000, -0.840949958078957],
+                           [0.0385165626872847,	-0.995685541771179,	-0.998809706393187,	0.0248674894685829,
+                            0.0385108455085616,	-0.996804998190338,	0.0247037314180914],
+                           [0.912666130611037, 0.0926632171848502, 0.0479237706568382, 0.539704223993876,
+                            0.912755333932707, 0.0797226267520033, 0.540548696845181]])
+
+        # 1) run the function
+        vp = VanishingPointDetector._image_to_gaussian_sphere(vpsimg_in, W_in, H_in, FOCAL_RATIO_in, pp_in)
+
+        # 2) compare results
+        assert np.all(np.abs(vp - vp_out) < 1e-10)
+
+
+
+class TestVanishingPointDetector(object):
     def test__remove_duplicates(self):
         # 0) declare input parameters
         vps_in = np.array([[801.086571010609, 415.546837031069, -1134.13678498561, 394.566836036080, -964.487303073194,

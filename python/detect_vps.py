@@ -362,7 +362,19 @@ class VanishingPointDetector:
         my_vps[np.isnan(my_vps)] = 1
 
         # impose orthogonality
-        my_orthogonal_vps = orthogonal_triplet(my_vps, NFAs, self.default_params.ORTHOGONALITY_THRESHOLD)
+        my_orthogonal_vps = self._orthogonal_triplet(my_vps, NFAs, self.default_params.ORTHOGONALITY_THRESHOLD)
+        if my_orthogonal_vps.shape[1] == 1:
+            my_orthogonal_vps = np.tile(my_orthogonal_vps, [1, 3])
+
+        if my_orthogonal_vps.shape[1] == 2:
+            # obtained only 2 VPs... estimating the third one...
+            estimated_vp = np.cross(my_orthogonal_vps[:, 1], my_orthogonal_vps[:, 0])
+            estimated_vp = -estimated_vp / np.linalg.norm(estimated_vp)
+
+            # add to current list of vps
+            my_orthogonal_vps = np.append(my_orthogonal_vps, estimated_vp, axis=1)
+
+        vpoimg = self._gaussian_sphere_to_image(my_orthogonal_vps, W, H, FOCAL_RATIO, pp)
 
     def _compute_horizon_line_non_manhattan(self, mvp_all, NFAs, lines_lsd):
         """
@@ -448,15 +460,41 @@ class VanishingPointDetector:
         return L
 
     @staticmethod
-    def _image_to_gaussian_sphere(vpsimg: np.ndarray, W: int, H: int,
-                                  FOCAL_RATIO: float, pp: np.ndarray) -> np.ndarray:
+    def _image_to_gaussian_sphere(vpsimg: np.ndarray, W: int, H: int, FOCAL_RATIO: float, pp: np.ndarray) -> np.ndarray:
+        """
+        Convert VP candidates in the image to unit vectors in the Gaussian sphere.
+        :param vpsimg:
+        :param W:
+        :param H:
+        :param FOCAL_RATIO:
+        :param pp:
+        :return:
+        """
         vp = np.vstack([vpsimg[0, :] - pp[0],
                        (H - vpsimg[1, :]) - (H - pp[1]),
                        np.ones(vpsimg[1, :].shape) * W * FOCAL_RATIO])
 
-        vp /= np.tile(np.sqrt(np.sum(vp ** 2)), [3, 1])
+        vp /= np.tile(np.sqrt(np.sum(vp ** 2, axis=0)), [3, 1])
 
         return vp
+
+    @staticmethod
+    def _gaussian_sphere_to_image(vp: np.ndarray, W: int, H: int, FOCAL_RATIO: float, pp: np.ndarray) -> np.ndarray:
+        """
+        Convert VP candidates as unit vectors in the Gaussian sphere to points in the image.
+        :param vp:
+        :param W:
+        :param H:
+        :param FOCAL_RATIO:
+        :param pp:
+        :return:
+        """
+        vp /= np.tile(np.sqrt(np.sum(deepcopy(vp) ** 2, axis=0)), [3, 1])
+        vpimg = np.array([W * FOCAL_RATIO * vp[0, :] / vp[2, :] + pp[0],
+                          W * FOCAL_RATIO * vp[1, :] / vp[2, :] + (H - pp[1])])
+        vpimg[1, :] = H - vpimg[1, :]
+        return vpimg
+
 
     @staticmethod
     def _orthogonal_triplet(my_vps: np.ndarray, NFAs: np.ndarray, ORTHOGONALITY_THRESHOLD: float):
