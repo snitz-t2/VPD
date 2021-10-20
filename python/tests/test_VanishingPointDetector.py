@@ -179,6 +179,34 @@ class TestVanishingPointDetector(object):
         assert np.all(np.abs(vpoimg - vpoimg_out) < 1e-12)
         assert np.all(np.abs(Y - Y_out) < 1e-2)
 
+    def test__compute_horizon_line_non_manhattan(self):
+        lines_lsd_in = np.loadtxt(join(data_folder, 'test__denoise_lines__lines_in.txt'), delimiter=',')
+        #Y_out = np.loadtxt(join(data_folder, 'test__compute_horizon_line_non_manhattan_Y_out.txt'), delimiter=',')
+        mvp_all_in = np.array([[801.156259844744, 371.299105478700, -965.966411594700, 800.620397399444,
+                                416.071234238046, 322.095987374500, -1134.13678498561],
+                               [268.795000423408, 15149.8342419224, 265.552008676436, 268.802540857881,
+                                12844.8842313756, 15210.1684811810, 268.800391684926]])
+        NFAs_in = np.array([[15.5109950836006, 9.77708028717022, 4.69261296923142, 14.4736967046236, 9.57277268761379,
+                             6.98574179935858, 1.95788730536498]]).T
+        vpoimg_out = np.array([[801.156259844744, 371.299105478700, -1572.84924724252],
+                               [268.795000423408, 15149.8342419224, 248.780728762999]])
+
+        vpd = VanishingPointDetector()
+        vpd.runtime_params.H = 612
+        vpd.runtime_params.W = 816
+        vpd.runtime_params.FOCAL_RATIO = 1.08000000000000
+
+        # 1) run function
+        Y, vpoimg = vpd._compute_horizon_line_non_manhattan(mvp_all_in, NFAs_in, lines_lsd_in)
+
+        # 2) compare results
+        # note: Y - the vertical pixel location of the horizon line - is obtained by using polyval for every horizontal
+        #       pixel in the image. However, the implementation of polyval in MATLAB gives a slightly different result
+        #       than the implementation in numpy. The difference is less than 1e-2 of a pixel, which is no significant
+        #       for practical applications.
+        assert np.all(np.abs(vpoimg - vpoimg_out) < 1e-12)
+        assert np.all(np.abs(Y - Y_out) < 1e-2)
+
     def test__detect_vps(self):
 
         # 0) define input data (image)
