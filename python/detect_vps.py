@@ -372,9 +372,26 @@ class VanishingPointDetector:
             estimated_vp = -estimated_vp / np.linalg.norm(estimated_vp)
 
             # add to current list of vps
-            my_orthogonal_vps = np.append(my_orthogonal_vps, estimated_vp, axis=1)
+            my_orthogonal_vps = np.append(my_orthogonal_vps, estimated_vp[:, np.newaxis], axis=1)
 
         vpoimg = self._gaussian_sphere_to_image(my_orthogonal_vps, W, H, FOCAL_RATIO, pp)
+
+        # which one is the vertical vanishing point? calculate angle with image
+        vpoimg_centered = vpoimg - np.array([[W / 2, W / 2, W / 2], [H / 2, H / 2,H / 2]])
+        cosangles = np.abs(vpoimg_centered[0, :]) / np.sqrt(np.sum(vpoimg_centered ** 2, axis=0))
+        I_vert = np.argmin(cosangles)
+        I_hor = np.setdiff1d(np.arange(3), I_vert)
+        vpoimg = vpoimg[:, [I_hor[0], I_vert, I_hor[1]]]
+
+        # get horizon line
+        P_ours = np.polyfit(np.array([vpoimg[0, 0], vpoimg[0, 2]]),
+                            np.array([vpoimg[1, 0], vpoimg[1, 2]]), deg=1)
+        X = np.arange(W)
+        Y = np.polyval(P_ours, X)
+
+        # TODO: draw segments with colors (needs an implementation of `draw_segments`)
+
+        return Y, vpoimg
 
     def _compute_horizon_line_non_manhattan(self, mvp_all, NFAs, lines_lsd):
         """
@@ -572,7 +589,7 @@ class VanishingPointDetector:
                 pair = pairs[I[-1], :]
                 ortho_vps = np.array([my_vps[:, pair[0]], my_vps[:, pair[1]]]).T
         else:
-            I = np.sort(nfa_scores_triplets)
+            I = np.argsort(nfa_scores_triplets)
             triplet = triplets[I[-1], :]
             ortho_vps = np.array([my_vps[:, triplet[0]], my_vps[:, triplet[1]], my_vps[:, triplet[2]]]).T
 
