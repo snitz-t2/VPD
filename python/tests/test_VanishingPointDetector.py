@@ -64,3 +64,32 @@ class TestVanishingPointDetector(object):
                                  acceleration=True, focal_ratio=1.08, plot=True, print_output=True)
 
         # 3) assert results are correct
+
+
+class TestVanishingPointDetectorDrawingFunctions(object):
+    def test__drawline(self):
+        # 0) load output files and image
+        BW_out = cv2.imread(join(data_folder, 'test__drawline_BW_out.tif'), -1)
+        ind_out = np.loadtxt(join(data_folder, 'test__drawline_ind_out.txt'), delimiter=',')
+        label_out = np.loadtxt(join(data_folder, 'test__drawline_label_out.txt'), delimiter=',')
+
+        # 1) convert output arrays from MATLAB indices to python indices
+        ind_out = ind_out.astype(int) - 1
+        label_out = label_out.astype(int) - 1
+
+        # 1) generate input data
+        p1 = np.array([[9, 9], [22, 99], [-15, -41]])
+        p2 = np.array([[49, 49], [89, 99], [49, 49]])
+        ind, label = VanishingPointDetector._drawline(p1, p2, *BW_out.shape)
+
+        # 2) assert results
+        assert np.all(ind == ind_out) and np.all(label == label_out)
+
+        # 3) verify on image
+        BW = np.zeros(BW_out.shape, dtype=np.uint8).ravel(order='F')
+        BW[ind] = 255
+        BW = BW.reshape(BW_out.shape, order='F')
+        assert np.all(BW == BW_out)
+
+
+

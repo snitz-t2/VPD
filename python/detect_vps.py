@@ -473,8 +473,174 @@ class VanishingPointDetector:
         raise NotImplementedError
 
     @staticmethod
-    def _drawline(p1:np.ndarray, p2:np.ndarray, W: int, H: int) -> tuple:
-        raise NotImplementedError
+    def _drawline(p1: np.ndarray, p2: np.ndarray, M: int, N: int) -> tuple:
+        """
+        DRAWLINE Returns the geometric space (matrix indices) occupied by a line segment in a MxN matrix.
+        Each line segment is defined by two endpoints.
+        :param p1: set of endpoints (Px2 numpy array). [x1 y1]
+        :param p2: set of endpoints connect to p1 (Px2 numpy array). [x2 y2]
+        :param M: Image height (number of rows).
+        :param N: Image width (number of columns).
+        :return: a length-2 tuple:
+                 - IND - matrix indices occupied by the line segments.
+                 - LABEL - label tag of each line drawn (from 1 to P).
+        """
+        # 0) handle input
+        assert isinstance(p1, np.ndarray)
+        assert isinstance(p2, np.ndarray)
+        assert p1.shape == p2.shape
+        assert len(p1.shape) == 2
+
+        # 1) Cycle for each pair of endpoints
+        ind = np.array([], dtype=int)
+        label = np.array([], dtype=int)
+        for line_number in range(len(p1)):
+
+            # Point coordinates
+            p1r = p1[line_number, 0]
+            p1c = p1[line_number, 1]
+            p2r = p2[line_number, 0]
+            p2c = p2[line_number, 1]
+
+            # 2) Boundary verification
+            # 2.1) A- Both points are out of range
+            if ((p1r < 1 or M < p1r) or (p1c < 1 or N < p1c)) and ((p2r < 1 or M < p2r) or (p2c < 1 or N < p2c)):
+                raise RuntimeError(f"Both points in line segment {line_number} are out of range. "
+                                   f"New coordinates are requested to fit the points in image boundaries.")
+
+            # 3) Reference versors
+            #      .....r..c.....
+            eN = np.array([[-1,  0]]).T
+            eE = np.array([[0,  1]]).T
+            eS = np.array([[1,  0]]).T
+            eW = np.array([[0, - 1]]).T
+
+            # 4) B- One of the points is out of range
+            if (p1r < 1 or M < p1r) or (p1c < 1 or N < p1c) or (p2r < 1 or M < p2r) or (p2c < 1 or N < p2c):
+                # 4.1) Classify the inner and outer point
+                if (p1r < 1 or M < p1r) or (p1c < 1 or N < p1c):
+                    p_out = np.array([[p1r, p1c]]).T
+                    p_in = np.array([[p2r, p2c]]).T
+                elif (p2r < 1 or M < p2r) or (p2c < 1 or N < p2c):
+                    p_out = np.array([[p2r, p2c]]).T
+                    p_in = np.array([[p1r, p1c]]).T
+
+                # 4.2) Vector defining line segment
+                v = p_out - p_in
+                aux = np.sort(np.abs(v), axis=0)
+                aspect_ratio = aux[0, 0] / aux[1, 0]
+
+                # 4.3) Vector orientation
+                north = (v.T @ eN)[0, 0]
+                west = (v.T @ eW)[0, 0]
+                east = (v.T @ eE)[0, 0]
+                south = (v.T @ eS)[0, 0]
+
+                # 4.4) Increments
+                deltaNS = 0
+                if north > 0:
+                    deltaNS = -1
+                if south > 0:
+                    deltaNS = 1
+
+                deltaWE = 0
+                if east > 0:
+                    deltaWE = 1
+                if west > 0:
+                    deltaWE = -1
+
+                # 4.5) Matrix subscripts occupied by the line segment
+                if abs(v[0]) >= abs(v[1]):
+                    alpha = [p_in[0, 0]]
+                    beta = [p_in[1, 0]]
+                    iter = 0
+                    while 0 <= alpha[iter] and alpha[iter] <= (M-1) and 0 <= beta[iter] and beta[iter] <= (N - 1):
+                        alpha.append(alpha[iter] + deltaNS )              # alpha grows throughout the column direction.
+                        beta.append(beta[iter] + aspect_ratio * deltaWE)  # beta grows throughout the row direction.
+                        iter += 1
+                    alpha = np.round(np.array(alpha[:-1])).astype(int)
+                    beta = np.round(np.array(beta[:-1])).astype(int)
+                    ind = np.append(ind, np.ravel_multi_index((alpha, beta), (N, M), order='F'))
+                    label = np.append(label, line_number * np.ones(len(alpha), dtype=int))
+
+                if abs(v[0]) < abs(v[1]):
+                    alpha = [p_in[1, 0]]
+                    beta = [p_in[0, 0]]
+                    iter = 0
+                    while 0 <= alpha[iter] and alpha[iter] <= (N - 1) and 0 <= beta[iter] and beta[iter] <= (M - 1):
+                        alpha.append(alpha[iter] + deltaWE )              # alpha grows throughout the row direction.
+                        beta.append(beta[iter] + aspect_ratio * deltaNS)  # beta grows throughout the column direction.
+                        iter += 1
+                    alpha = np.round(np.array(alpha[:-1])).astype(int)
+                    beta = np.round(np.array(beta[:-1])).astype(int)
+                    ind = np.append(ind, np.ravel_multi_index((beta, alpha), (N, M), order='F'))
+                    label = np.append(label, line_number * np.ones(len(alpha), dtype=int))
+                del alpha, beta
+                continue
+
+            # 5) C- Both points are in range
+            # 5.1) Classify the inner and outer point
+            p_out = np.array([[p2r, p2c]]).T
+            p_in = np.array([[p1r, p1c]]).T
+
+            # 5.2) Vector defining line segment
+            v = p_out - p_in
+            aux = np.sort(np.abs(v), axis=0)
+            aspect_ratio = aux[0, 0] / aux[1, 0]
+
+            # 5.3) Vector orientation.
+            north = (v.T @ eN)[0, 0]
+            west = (v.T @ eW)[0, 0]
+            east = (v.T @ eE)[0, 0]
+            south = (v.T @ eS)[0, 0]
+
+            # 5.4) Increments
+            deltaNS = 0
+            if north > 0:
+                deltaNS = -1
+            if south > 0:
+                deltaNS = 1
+
+            deltaWE = 0
+            if east > 0:
+                deltaWE = 1
+            if west > 0:
+                deltaWE = -1
+
+            # 5.5) Matrix subscripts occupied by the line segment
+            row_range = np.sort(np.array([p1r, p2r]))
+            col_range = np.sort(np.array([p1c, p2c]))
+            if abs(v[0]) >= abs(v[1]):
+                alpha = [p_in[0, 0]]
+                beta = [p_in[1, 0]]
+                iter = 0
+                while row_range[0] <= alpha[iter] and alpha[iter] <= row_range[1] and \
+                      col_range[0] <= beta[iter] and beta[iter] <= col_range[1]:
+                    alpha.append(alpha[iter] + deltaNS)               # alpha grows throughout the column direction.
+                    beta.append(beta[iter] + aspect_ratio * deltaWE)  # beta grows throughout the row direction.
+                    iter += 1
+                alpha = np.round(np.array(alpha[:-1])).astype(int)
+                beta = np.round(np.array(beta[:-1])).astype(int)
+                ind = np.append(ind, np.ravel_multi_index((alpha, beta), (N, M), order='F'))
+                label = np.append(label, line_number * np.ones(len(alpha), dtype=int))
+            if abs(v[0]) < abs(v[1]):
+                alpha = [p_in[1, 0, 0]]
+                beta = [p_in[0, 0]]
+                iter = 0
+                while col_range[0] <= alpha[iter] and alpha[iter] <= col_range[1] and \
+                        row_range[0] <= beta[iter] and beta[iter] <= row_range[1]:
+                    alpha.append(alpha[iter] + deltaWE)  # alpha grows throughout the row direction.
+                    beta.append(beta[iter] + aspect_ratio * deltaNS)  # beta grows throughout the column direction.
+                    iter += 1
+                alpha = np.round(np.array(alpha[:-1])).astype(int)
+                beta = np.round(np.array(beta[:-1])).astype(int)
+                ind = np.append(ind, np.ravel_multi_index((beta, alpha), (N, M), order='F'))
+                label = np.append(label, line_number * np.ones(len(alpha), dtype=int))
+            del alpha, beta
+            continue
+
+        return ind, label
+
 
 
 
