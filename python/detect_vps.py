@@ -101,9 +101,9 @@ class VanishingPointDetector:
         # 12) compute horizon line
         if mvp_all.size > 0:
             if self.default_params.MANHATTAN:
-                horizon_line, vpimg = compute_horizon_line_manhattan(mvp_all, NFAs, lines_lsd)
+                horizon_line, vpimg = self._compute_horizon_line_manhattan(mvp_all, NFAs, lines_lsd)
             else:
-                horizon_line, vpimg = compute_horizon_line_non_manhattan(mvp_all, NFAs, lines_lsd)
+                horizon_line, vpimg = self._compute_horizon_line_non_manhattan(mvp_all, NFAs, lines_lsd)
         else:
             horizon_line = np.array([])
             vpimg = np.array([])
@@ -333,14 +333,14 @@ class VanishingPointDetector:
         for ii in range(len(clus)):
             c = clus[ii]
             if len(c) == 1:
-                final_vps = np.append(final_vps, vps[:, c])
+                final_vps = np.append(final_vps, vps[:, c], axis=1)
                 final_NFAs = np.append(final_NFAs, NFAs[c])
             else:
                 I = np.argmax(NFAs[c])
-                final_vps = np.append(final_vps, vps[:, c[I]])
+                final_vps = np.append(final_vps, vps[:, c[I]], axis=1)
                 final_NFAs = np.append(final_NFAs, NFAs[c[I]])
 
-        return final_vps, final_NFAs
+        return final_vps, final_NFAs[:, np.newaxis]
 
     def _compute_horizon_line_manhattan(self, mvp_all, NFAs, lines_lsd):
         """
@@ -470,7 +470,78 @@ class VanishingPointDetector:
         :return:
         """
         N = my_vps.shape[1]
-        raise NotImplementedError
+        nfa_scores_triplets = np.array([])
+        ortho_scores_triplets = np.array([])
+        triplets = np.array([])
+        nfa_scores_pairs = np.array([])
+        ortho_scores_pairs = np.array([])
+        pairs = np.array([])
+
+        for ii in range(N):
+            vpi = my_vps[:, ii]
+            nfai = NFAs[ii]
+
+            for jj in range(ii-1):
+                if ii == jj:
+                    continue
+                vpj = my_vps[:, jj]
+                nfaj = NFAs[jj]
+                scoreij = np.abs(np.dot(vpi, vpj))
+
+                nfa_scores_pairs = np.append(nfa_scores_pairs, nfai + nfaj)
+                ortho_scores_pairs = np.append(ortho_scores_pairs, scoreij)
+
+                pairs = np.append(pairs, [ii, jj])
+
+                for kk in range(N):
+                    if kk == jj or jj == ii:
+                        continue
+                    vpk = my_vps[:, kk]
+                    nfak = NFAs[kk]
+                    scorejk = np.abs(np.dot(vpj, vpk))
+                    scoreik = np.abs(np.dot(vpi, vpk))
+
+                    # get orthogonality score
+                    ortho_score = np.max([scoreij, scorejk, scoreik])
+                    nfa_score = nfai + nfaj + nfak
+
+                    nfa_scores_triplets = np.append(nfa_scores_triplets, nfa_score)
+                    ortho_scores_triplets = np.append(ortho_scores_triplets, ortho_score)
+                    triplets = np.append(triplets, [ii, jj, kk])
+
+        ORTHO_SCORE_THRESHOLD_TRIPLETS = ORTHOGONALITY_THRESHOLD
+        ORTHO_SCORE_THRESHOLD_pairS = ORTHOGONALITY_THRESHOLD
+
+        z3 = ortho_scores_triplets <= ORTHO_SCORE_THRESHOLD_TRIPLETS
+        nfa_scores_triplets = nfa_scores_triplets[z3]
+        ortho_scores_triplets = ortho_scores_triplets[z3]
+        triplets = triplets[z3, :]
+
+        z2 = ortho_scores_pairs <= ORTHO_SCORE_THRESHOLD_pairS
+        nfa_scores_pairs_orig = deepcopy(nfa_scores_pairs)
+        ortho_scores_pairs_orig = deepcopy(ortho_scores_pairs)
+        pairs_orig = deepcopy(pairs)
+        nfa_scores_pairs = nfa_scores_pairs[z2]
+        ortho_scores_pairs = ortho_scores_pairs[z2]
+        pairs = pairs[z2, :]
+
+        if triplets.size == 0:  # no orthogonal triplets, return pair
+            if pairs.size ==0:  # no triplets or pairs, get the most orthogonal pair
+                I = np.argsort(ortho_scores_pairs_orig)
+                pair = pairs_orig[I[0], :]
+                ortho_vps = np.array([my_vps[:, pair[0]], my_vps[:, pair[1]]])
+            else:               # by nfa
+                I = np.argsort(nfa_scores_pairs)
+                pair = pairs[I[-1], :]
+                ortho_vps = np.array([my_vps[:, pair[0]], my_vps[:, pair[1]]])
+        else:
+            I = np.sort(nfa_scores_triplets)
+            triplet = triplets[I[-1], :]
+            ortho_vps = np.array([my_vps[:, triplet[0]], my_vps[:, triplet[1]], my_vps[:, triplet[2]]])
+
+        return ortho_vps
+
+
 
     @staticmethod
     def _drawline(p1: np.ndarray, p2: np.ndarray, M: int, N: int) -> tuple:
@@ -554,7 +625,7 @@ class VanishingPointDetector:
                     alpha = [p_in[0, 0]]
                     beta = [p_in[1, 0]]
                     iter = 0
-                    while 0 <= alpha[iter] and alpha[iter] <= (M-1) and 0 <= beta[iter] and beta[iter] <= (N - 1):
+                    while 0 <= alpha[iter] <= (M-1) and 0 <= beta[iter] <= (N - 1):
                         alpha.append(alpha[iter] + deltaNS )              # alpha grows throughout the column direction.
                         beta.append(beta[iter] + aspect_ratio * deltaWE)  # beta grows throughout the row direction.
                         iter += 1
@@ -567,7 +638,7 @@ class VanishingPointDetector:
                     alpha = [p_in[1, 0]]
                     beta = [p_in[0, 0]]
                     iter = 0
-                    while 0 <= alpha[iter] and alpha[iter] <= (N - 1) and 0 <= beta[iter] and beta[iter] <= (M - 1):
+                    while 0 <= alpha[iter] <= (N - 1) and 0 <= beta[iter] <= (M - 1):
                         alpha.append(alpha[iter] + deltaWE )              # alpha grows throughout the row direction.
                         beta.append(beta[iter] + aspect_ratio * deltaNS)  # beta grows throughout the column direction.
                         iter += 1
@@ -614,8 +685,7 @@ class VanishingPointDetector:
                 alpha = [p_in[0, 0]]
                 beta = [p_in[1, 0]]
                 iter = 0
-                while row_range[0] <= alpha[iter] and alpha[iter] <= row_range[1] and \
-                      col_range[0] <= beta[iter] and beta[iter] <= col_range[1]:
+                while row_range[0] <= alpha[iter] <= row_range[1] and col_range[0] <= beta[iter] <= col_range[1]:
                     alpha.append(alpha[iter] + deltaNS)               # alpha grows throughout the column direction.
                     beta.append(beta[iter] + aspect_ratio * deltaWE)  # beta grows throughout the row direction.
                     iter += 1
@@ -627,8 +697,7 @@ class VanishingPointDetector:
                 alpha = [p_in[1, 0, 0]]
                 beta = [p_in[0, 0]]
                 iter = 0
-                while col_range[0] <= alpha[iter] and alpha[iter] <= col_range[1] and \
-                        row_range[0] <= beta[iter] and beta[iter] <= row_range[1]:
+                while col_range[0] <= alpha[iter] <= col_range[1] and row_range[0] <= beta[iter] <= row_range[1]:
                     alpha.append(alpha[iter] + deltaWE)  # alpha grows throughout the row direction.
                     beta.append(beta[iter] + aspect_ratio * deltaNS)  # beta grows throughout the column direction.
                     iter += 1

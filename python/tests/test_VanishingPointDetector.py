@@ -45,6 +45,23 @@ class TestVanishingPointDetector(object):
             for jj in range(len(clus_out[ii])):
                 assert clus[ii][jj] == clus_out[ii][jj]
 
+    def test__remove_duplicates(self):
+        # 0) declare input parameters
+        vps_in = np.array([[801.086571010609, 415.546837031069, -1134.13678498561, 394.566836036080, -964.487303073194,
+                            800.663214555392, 427.257560668762,	-1161.51366309469, -952.156345371049],
+                           [268.804975644552, 11716.0648307581,	268.800391684926, 22792.6458578845,	266.667286206964,
+                            268.817157382630, 15706.5734652106,	268.286391427570, 264.229897744355]])
+        NFAs_in = np.array([[16.5774600986004, 12.2759527537009, 7.89808635088906, 7.61558281212357, 6.31541371126635,
+                             14.3126110026628, 8.90090669359107, 1.87937845301575, 1.14151921068338]]).T
+        vpd = VanishingPointDetector()
+
+        # 1) run the function
+        final_vps, final_NFAs = vpd._remove_duplicates(vps_in, NFAs_in)
+
+        # 2) compare results to MATLAB (in this case, the output of this function is identical to the input)
+        assert np.all(np.abs(final_vps - vps_in) < 1e-12)
+        assert np.all(np.abs(final_NFAs - NFAs_in) < 1e-12)
+
     def test__detect_vps(self):
 
         # 0) define input data (image)
