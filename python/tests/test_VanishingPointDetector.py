@@ -45,6 +45,27 @@ class TestVanishingPointDetector(object):
             for jj in range(len(clus_out[ii])):
                 assert clus[ii][jj] == clus_out[ii][jj]
 
+    def test__orthogonal_triplet(self):
+        # 0) load and declare input and output params
+        my_vps_in = np.array([[0.407053027323275, -0.00226593554265788,	-0.867628080625217,	0.406687367833829,
+                               -6.23742469510082e-05, -0.00369651390576061,	-0.850293443388202],
+                              [0.0385165721289403, -0.998599901693855, 0.0208519605269108, 0.0385108455085616,
+                               -0.997499486626139, -0.998205327252022, 0.0241837471736455],
+                              [0.912592081172302, 0.0528498048543201, 0.496776317322784, 0.912755333932707,
+                               0.0706736888102111,	0.0597700629966881,	0.525752990009259]])
+        NFAs_in = np.array([[15.2695981373620, 10.0276928241632, 5.92824850463247, 14.2149491636451, 9.95881044997353,
+                             8.57289712475728, 1.10973823275201]]).T
+        ORTHOGONALITY_THRESHOLD_in = 0.0436193873653362
+        ortho_vps_out = np.array([[-0.00226593554265788, 0.407053027323275],
+                                  [-0.998599901693855, 0.0385165721289403],
+                                  [0.0528498048543201, 0.912592081172302]])
+
+        # 1) call the function
+        ortho_vps = VanishingPointDetector._orthogonal_triplet(my_vps_in, NFAs_in, ORTHOGONALITY_THRESHOLD_in)
+
+        # 2) compare results
+        assert np.all(np.abs(ortho_vps - ortho_vps_out) < 1e-12)
+
     def test__remove_duplicates(self):
         # 0) declare input parameters
         vps_in = np.array([[801.086571010609, 415.546837031069, -1134.13678498561, 394.566836036080, -964.487303073194,

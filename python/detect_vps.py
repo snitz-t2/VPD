@@ -351,7 +351,6 @@ class VanishingPointDetector:
         :param lines_lsd:
         :return:
         """
-        raise NotImplementedError
         H = self.runtime_params.H
         W = self.runtime_params.W
 
@@ -472,34 +471,34 @@ class VanishingPointDetector:
         N = my_vps.shape[1]
         nfa_scores_triplets = np.array([])
         ortho_scores_triplets = np.array([])
-        triplets = np.array([])
+        triplets = np.empty((0, 3), dtype=int)
         nfa_scores_pairs = np.array([])
         ortho_scores_pairs = np.array([])
-        pairs = np.array([])
+        pairs = np.empty((0, 2), dtype=int)
 
         for ii in range(N):
-            vpi = my_vps[:, ii]
-            nfai = NFAs[ii]
+            vpi = my_vps[:, ii][:, np.newaxis]
+            nfai = NFAs[ii, 0]
 
-            for jj in range(ii-1):
+            for jj in range(ii):
                 if ii == jj:
                     continue
-                vpj = my_vps[:, jj]
-                nfaj = NFAs[jj]
-                scoreij = np.abs(np.dot(vpi, vpj))
+                vpj = my_vps[:, jj][:, np.newaxis]
+                nfaj = NFAs[jj, 0]
+                scoreij = np.abs((vpi.T @ vpj)[0, 0])
 
                 nfa_scores_pairs = np.append(nfa_scores_pairs, nfai + nfaj)
                 ortho_scores_pairs = np.append(ortho_scores_pairs, scoreij)
 
-                pairs = np.append(pairs, [ii, jj])
+                pairs = np.append(pairs, np.array([[ii, jj]]), axis=0)
 
                 for kk in range(N):
                     if kk == jj or jj == ii:
                         continue
-                    vpk = my_vps[:, kk]
-                    nfak = NFAs[kk]
-                    scorejk = np.abs(np.dot(vpj, vpk))
-                    scoreik = np.abs(np.dot(vpi, vpk))
+                    vpk = my_vps[:, kk][:, np.newaxis]
+                    nfak = NFAs[kk, 0]
+                    scorejk = np.abs((vpj.T @ vpk)[0, 0])
+                    scoreik = np.abs((vpi.T @ vpk)[0, 0])
 
                     # get orthogonality score
                     ortho_score = np.max([scoreij, scorejk, scoreik])
@@ -507,7 +506,7 @@ class VanishingPointDetector:
 
                     nfa_scores_triplets = np.append(nfa_scores_triplets, nfa_score)
                     ortho_scores_triplets = np.append(ortho_scores_triplets, ortho_score)
-                    triplets = np.append(triplets, [ii, jj, kk])
+                    triplets = np.append(triplets, np.array([[ii, jj, kk]]), axis=0)
 
         ORTHO_SCORE_THRESHOLD_TRIPLETS = ORTHOGONALITY_THRESHOLD
         ORTHO_SCORE_THRESHOLD_pairS = ORTHOGONALITY_THRESHOLD
@@ -526,18 +525,18 @@ class VanishingPointDetector:
         pairs = pairs[z2, :]
 
         if triplets.size == 0:  # no orthogonal triplets, return pair
-            if pairs.size ==0:  # no triplets or pairs, get the most orthogonal pair
+            if pairs.size == 0:  # no triplets or pairs, get the most orthogonal pair
                 I = np.argsort(ortho_scores_pairs_orig)
                 pair = pairs_orig[I[0], :]
-                ortho_vps = np.array([my_vps[:, pair[0]], my_vps[:, pair[1]]])
+                ortho_vps = np.array([my_vps[:, pair[0]], my_vps[:, pair[1]]]).T
             else:               # by nfa
                 I = np.argsort(nfa_scores_pairs)
                 pair = pairs[I[-1], :]
-                ortho_vps = np.array([my_vps[:, pair[0]], my_vps[:, pair[1]]])
+                ortho_vps = np.array([my_vps[:, pair[0]], my_vps[:, pair[1]]]).T
         else:
             I = np.sort(nfa_scores_triplets)
             triplet = triplets[I[-1], :]
-            ortho_vps = np.array([my_vps[:, triplet[0]], my_vps[:, triplet[1]], my_vps[:, triplet[2]]])
+            ortho_vps = np.array([my_vps[:, triplet[0]], my_vps[:, triplet[1]], my_vps[:, triplet[2]]]).T
 
         return ortho_vps
 
