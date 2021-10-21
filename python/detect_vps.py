@@ -401,8 +401,159 @@ class VanishingPointDetector:
         :param lines_lsd:
         :return:
         """
-        raise NotImplementedError
+        my_vps = deepcopy(mvp_all)
+        N = my_vps.shape[1]
+        H = self.runtime_params.H
+        W = self.runtime_params.W
+        VAT = self.default_params.VERTICAL_ANGLE_THRESHOLD
+        FOCAL_RATIO = self.runtime_params.FOCAL_RATIO
+        ORTHOGONALITY_THRESHOLD = self.default_params.ORTHOGONALITY_THRESHOLD
+        INFINITY_THRESHOLD = self.default_params.INFINITY_THRESHOLD
+        DIST_THRESHOLD = self.default_params.DIST_THRESHOLD
+        pp = np.array([W / 2, H / 2])
+        cp = np.vstack([np.ones((1, N)) * pp[0], np.ones((1, N)) * pp[1]])
 
+        centered_vp = mvp_all - cp
+        angles = np.arctan2(centered_vp[1, :], centered_vp[0, :])
+
+        # estimate vertical VPs by sinus of angle wrt central point
+        vertical_angle_scores = np.abs(np.sin(angles))
+        vertical_distance_scores = np.abs(centered_vp[1, :])
+        vertical_vps_idx = (vertical_angle_scores > np.sin(np.deg2rad(VAT))) and (vertical_distance_scores > H)
+        vertical_vps = mvp_all[:, vertical_vps_idx]
+
+        if vertical_vps.size == 0:
+            # take just the most vertical
+            I = np.argsort(vertical_distance_scores)
+            vertical_vps_idx = I[-1]
+            vertical_vps = mvp_all[:, vertical_vps_idx]
+
+        # take vertical vp with lowest NFA
+        NFAs_vertical_vps = NFAs[vertical_vps_idx]
+        vpI = np.argmax(NFAs_vertical_vps)
+        vertical_vp = vertical_vps[:, vpI]
+
+        # vertical line
+        vl = vertical_vp.T - pp[:, np.newaxis]
+
+        # use remaining points as horizontal
+        horizontal_vps_idx = np.setdiff1d(np.arange(N), vertical_vps_idx)
+
+        # if empty, use all of them except the vertical one
+        if horizontal_vps_idx.size == 0:
+            horizontal_vps_idx = np.setdiff1d(np.arange(N), vpI)
+
+        horizontal_vps = mvp_all[:, horizontal_vps_idx]
+        NFAs_horizontal_vps = NFAs[horizontal_vps_idx]
+
+        # order horizontal vps by nfa
+        I = np.argsort(NFAs_horizontal_vps)
+        horizontal_vps = horizontal_vps[:, I[::-1]]
+        NFAs_horizontal_vps = NFAs_horizontal_vps[I[::-1]]
+
+        # convert vps to unit sphere
+        vertical_vp_unit = self._image_to_gaussian_sphere(vertical_vp, W, H, FOCAL_RATIO, pp)
+        horizontal_vps_unit = self._image_to_gaussian_sphere(horizontal_vps, W, H, FOCAL_RATIO, pp)
+
+        # check orthogonality of horizontal vps with vertical vp
+        orthogonality_scores = np.array([])
+        for ii in range(horizontal_vps_unit[1]):
+            orthogonality_score = np.abs(np.dot(horizontal_vps_unit[:, ii], vertical_vp_unit))
+            orthogonality_scores = np.append(orthogonality_scores, orthogonality_score)
+
+        # is_orthogonal is 1 where vps are orthogonal to vertical vp
+        is_orthogonal = np.ones(orthogonality_scores.shape)
+        is_orthogonal[orthogonality_scores > ORTHOGONALITY_THRESHOLD] = 0
+
+        # check for horizontal vps from parallel lines
+        NH = horizontal_vps.shape[1]
+        norm_horizontal_vps = np.abs(horizontal_vps[0, ] - pp[0])
+
+        # is_not_parallel is 1 where vp does not come from parallel lines
+        is_not_parallel = np.ones(norm_horizontal_vps.shape)
+        is_not_parallel[norm_horizontal_vps > W * INFINITY_THRESHOLD] = 0
+
+        # if all horizontal vps come from parallel lines, take the closest one
+        if np.sum(is_not_parallel) == 0:
+            I = np.argmin(norm_horizontal_vps)
+            is_not_parallel[I] = 1
+
+        weights_NFA_horizontal_vps = NFAs_horizontal_vps / np.sum(NFAs_horizontal_vps)
+        weights_NFA_horizontal_vps = weights_NFA_horizontal_vps ** 2
+        weights = is_not_parallel.T * weights_NFA_horizontal_vps * is_orthogonal.T
+
+        # if no vp satisfies all conditions just take the one with lowest NFA
+        if np.sum(weights) == 0:
+            print('*************************************')
+            print('CRITICAL: NO orthogonal and finite VP')
+            print('*************************************')
+            I = np.argmax(weights_NFA_horizontal_vps)
+            weights[I] = 1
+
+        weights /= np.sum(weights)
+
+        z = weights != 0
+        weights = weights[z]
+        horizontal_vps = horizontal_vps[:, z]
+        NH = horizontal_vps.shape[1]
+
+        I = np.argsort(weights)
+        weights = weights[I[::-1]]
+        horizontal_vps = horizontal_vps[:, I[::-1]]
+
+        # get horizontal line defined by first vp and vertical line (vl)
+        # get auxiliary point in line perpendicular to vl passing by horizontal vp
+        hvp = horizontal_vps[:, 0]
+        normal_to_vertical_line = np.array([[vl[1], -vl[0]]]).T * np.linalg.norm(hvp)
+        nvl = normal_to_vertical_line
+
+        aux1 = hvp + nvl
+        aux2 = hvp - nvl
+
+        # current line coordinates
+        m, b = self._line_to_slope_offset(np.hstack(aux1.T, aux2.T))
+        X = np.arange(W)
+        Y = m * X + b
+
+        all_Y = np.zeros((NH, 2))
+        all_Y[1, :] = Y
+
+        for ii in range(1, NH):
+            hvp = horizontal_vps[:, ii]
+            aux1 = hvp + nvl
+            aux2 = hvp - nvl
+            m, b = self._line_to_slope_offset(np.hstack([aux1.T, aux2.T]))
+            Y = m * X + b
+            all_Y[ii, :] = Y
+
+        weights /= np.sum(weights)
+        weights = np.tile((weights, [1, 2]))
+
+        # weighted average of horizon lines
+        Y = np.sum(all_Y * weights, axis=0)
+
+        # remove outliers and re-estimate
+        Y_dists = np.abs(all_Y[:, 0] - Y[0]) / H
+        z = Y_dists < DIST_THRESHOLD
+        weights2 = weights[z, :]
+        all_Y2 = all_Y[z, :]
+        horizontal_vps = horizontal_vps[:, 1]
+
+        # re-estimate
+        weights = weights2 / np.sum(weights2[:, 0])
+        Y = np.sum(all_Y2 * weights, axis=0)
+
+        # obtained horizon line
+        a = (Y[1] - Y[0]) / (X[1] - X[0])
+        X = np.arange(W)
+        Y = a * X + Y[0]
+
+        # obtained vps
+        vpimg = np.hstack([horizontal_vps, vertical_vp])
+
+        # TODO: draw segments with colors (needs an implementation of `draw_segments`)
+
+        return Y, vpimg
 
     @staticmethod
     def _aggclus(X: np.ndarray, THRESHOLD: float) -> list:
@@ -764,6 +915,12 @@ class VanishingPointDetector:
 
         return ind, label
 
+    @staticmethod
+    def _line_to_slope_offset(l: np.ndarray):
+        l = self._line_to_homogeneous(l)
+        m = -l[0] / l[1]
+        b = -l[2] / l[1]
+        return m, b
 
 
 
