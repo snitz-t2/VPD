@@ -419,7 +419,7 @@ class VanishingPointDetector:
         # estimate vertical VPs by sinus of angle wrt central point
         vertical_angle_scores = np.abs(np.sin(angles))
         vertical_distance_scores = np.abs(centered_vp[1, :])
-        vertical_vps_idx = (vertical_angle_scores > np.sin(np.deg2rad(VAT))) and (vertical_distance_scores > H)
+        vertical_vps_idx = np.bitwise_and(vertical_angle_scores > np.sin(np.deg2rad(VAT)), vertical_distance_scores > H)
         vertical_vps = mvp_all[:, vertical_vps_idx]
 
         if vertical_vps.size == 0:
@@ -431,13 +431,13 @@ class VanishingPointDetector:
         # take vertical vp with lowest NFA
         NFAs_vertical_vps = NFAs[vertical_vps_idx]
         vpI = np.argmax(NFAs_vertical_vps)
-        vertical_vp = vertical_vps[:, vpI]
+        vertical_vp = vertical_vps[:, vpI][:, np.newaxis]
 
         # vertical line
-        vl = vertical_vp.T - pp[:, np.newaxis]
+        vl = (vertical_vp.T - pp)[0]
 
         # use remaining points as horizontal
-        horizontal_vps_idx = np.setdiff1d(np.arange(N), vertical_vps_idx)
+        horizontal_vps_idx = np.setdiff1d(np.arange(N), np.where(vertical_vps_idx))
 
         # if empty, use all of them except the vertical one
         if horizontal_vps_idx.size == 0:
@@ -447,7 +447,7 @@ class VanishingPointDetector:
         NFAs_horizontal_vps = NFAs[horizontal_vps_idx]
 
         # order horizontal vps by nfa
-        I = np.argsort(NFAs_horizontal_vps)
+        I = np.argsort(NFAs_horizontal_vps.T)[0]
         horizontal_vps = horizontal_vps[:, I[::-1]]
         NFAs_horizontal_vps = NFAs_horizontal_vps[I[::-1]]
 
@@ -457,8 +457,8 @@ class VanishingPointDetector:
 
         # check orthogonality of horizontal vps with vertical vp
         orthogonality_scores = np.array([])
-        for ii in range(horizontal_vps_unit[1]):
-            orthogonality_score = np.abs(np.dot(horizontal_vps_unit[:, ii], vertical_vp_unit))
+        for ii in range(horizontal_vps_unit.shape[1]):
+            orthogonality_score = np.abs(np.dot(horizontal_vps_unit[:, ii], vertical_vp_unit))[0]
             orthogonality_scores = np.append(orthogonality_scores, orthogonality_score)
 
         # is_orthogonal is 1 where vps are orthogonal to vertical vp
@@ -467,7 +467,7 @@ class VanishingPointDetector:
 
         # check for horizontal vps from parallel lines
         NH = horizontal_vps.shape[1]
-        norm_horizontal_vps = np.abs(horizontal_vps[0, ] - pp[0])
+        norm_horizontal_vps = np.abs(horizontal_vps[0, :] - pp[0])
 
         # is_not_parallel is 1 where vp does not come from parallel lines
         is_not_parallel = np.ones(norm_horizontal_vps.shape)
@@ -480,7 +480,7 @@ class VanishingPointDetector:
 
         weights_NFA_horizontal_vps = NFAs_horizontal_vps / np.sum(NFAs_horizontal_vps)
         weights_NFA_horizontal_vps = weights_NFA_horizontal_vps ** 2
-        weights = is_not_parallel.T * weights_NFA_horizontal_vps * is_orthogonal.T
+        weights = is_not_parallel[:, np.newaxis] * weights_NFA_horizontal_vps * is_orthogonal[:, np.newaxis]
 
         # if no vp satisfies all conditions just take the one with lowest NFA
         if np.sum(weights) == 0:
@@ -494,7 +494,7 @@ class VanishingPointDetector:
 
         z = weights != 0
         weights = weights[z]
-        horizontal_vps = horizontal_vps[:, z]
+        horizontal_vps = horizontal_vps[:, z.T[0]]
         NH = horizontal_vps.shape[1]
 
         I = np.argsort(weights)
@@ -507,27 +507,25 @@ class VanishingPointDetector:
         normal_to_vertical_line = np.array([[vl[1], -vl[0]]]).T * np.linalg.norm(hvp)
         nvl = normal_to_vertical_line
 
-        aux1 = hvp + nvl
-        aux2 = hvp - nvl
-
-        # current line coordinates
-        m, b = self._line_to_slope_offset(np.hstack(aux1.T, aux2.T))
-        X = np.arange(W)
+        aux1 = hvp[:, np.newaxis] + nvl
+        aux2 = hvp[:, np.newaxis] - nvl        # current line coordinates
+        m, b = self._line_to_slope_offset(np.hstack([aux1.T, aux2.T]))
+        X = np.array([0, W -1])
         Y = m * X + b
 
         all_Y = np.zeros((NH, 2))
-        all_Y[1, :] = Y
+        all_Y[0, :] = Y
 
         for ii in range(1, NH):
             hvp = horizontal_vps[:, ii]
-            aux1 = hvp + nvl
-            aux2 = hvp - nvl
+            aux1 = hvp[:, np.newaxis] + nvl
+            aux2 = hvp[:, np.newaxis] - nvl
             m, b = self._line_to_slope_offset(np.hstack([aux1.T, aux2.T]))
             Y = m * X + b
             all_Y[ii, :] = Y
 
         weights /= np.sum(weights)
-        weights = np.tile((weights, [1, 2]))
+        weights = np.tile(weights[:, np.newaxis], [1, 2])
 
         # weighted average of horizon lines
         Y = np.sum(all_Y * weights, axis=0)
@@ -537,7 +535,7 @@ class VanishingPointDetector:
         z = Y_dists < DIST_THRESHOLD
         weights2 = weights[z, :]
         all_Y2 = all_Y[z, :]
-        horizontal_vps = horizontal_vps[:, 1]
+        horizontal_vps = horizontal_vps[:, z]
 
         # re-estimate
         weights = weights2 / np.sum(weights2[:, 0])
@@ -554,6 +552,12 @@ class VanishingPointDetector:
         # TODO: draw segments with colors (needs an implementation of `draw_segments`)
 
         return Y, vpimg
+
+    def _line_to_slope_offset(self, l: np.ndarray):
+        l = self._line_to_homogeneous(l)
+        m = -l[0, 0] / l[0, 1]
+        b = -l[0, 2] / l[0, 1]
+        return m, b
 
     @staticmethod
     def _aggclus(X: np.ndarray, THRESHOLD: float) -> list:
@@ -914,13 +918,6 @@ class VanishingPointDetector:
             continue
 
         return ind, label
-
-    @staticmethod
-    def _line_to_slope_offset(l: np.ndarray):
-        l = self._line_to_homogeneous(l)
-        m = -l[0] / l[1]
-        b = -l[2] / l[1]
-        return m, b
 
 
 
