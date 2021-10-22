@@ -84,8 +84,8 @@ class VanishingPointDetector:
         detections_twisted, m2, b2 = find_detections(points_twisted, self.default_params)
 
         # 8) gather intial vanishing point detections (convert them from dual spaces)
-        mvp_all, NFAs = self._read_detections_as_vps(detections_straight, m1, b1,
-                                                     detections_twisted, m2, b2)
+        mvp_all, NFAs = self._read_detections_as_vps(detections_straight, m1[:, np.newaxis], b1[:, np.newaxis],
+                                                     detections_twisted, m2[:, np.newaxis], b2[:, np.newaxis])
 
         # 9) refine detections
         mvp_all = self._refine_detections(mvp_all, lines_lsd)
