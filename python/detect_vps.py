@@ -207,28 +207,28 @@ class VanishingPointDetector:
 
         # 2) get vps in image coordinates (do PCLines inverse)
         d = 1
-        x1 = b1
+        x1 = deepcopy(b1)
         y1 = d * m1 + b1
 
-        x2 = b2
+        x2 = deepcopy(b2)
         y2 = -(-d * m2 + b2)
 
-        x1 = x1 * W
-        y1 = y1 * H
+        x1 *= W
+        y1 *= H
 
-        x2 = x2 * W
-        y2 = y2 * H
+        x2 *= W
+        y2 *= H
 
-        vps1 = np.vstack([x1, y1])
-        vps2 = np.vstack([x2, y2])
+        vps1 = np.hstack([x1, y1])
+        vps2 = np.hstack([x2, y2])
 
-        mvp_all = np.hstack([vps1, vps2])
-        NFAs = np.hstack([NFAs1, NFAs2])
+        mvp_all = np.hstack([vps1.T, vps2.T])
+        NFAs = np.hstack([NFAs1, NFAs2])[:, np.newaxis]
 
         # 3) remove nan (infinity vp)
-        z = np.isnan(mvp_all[0, :]) or np.isnan(mvp_all[1, :])
+        z = np.isnan(mvp_all[0, :]) | np.isnan(mvp_all[1, :])
 
-        return mvp_all[:, z], NFAs[z]
+        return mvp_all[:, ~z], NFAs[~z]
 
     def _refine_detections(self, mvp_all: np.ndarray, lines_lsd: np.ndarray) -> np.ndarray:
         """
