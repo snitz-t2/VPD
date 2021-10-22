@@ -157,19 +157,19 @@ class VanishingPointDetector:
         L = len(lines)
 
         # 2) convert lines to points in both dual spaces
-        points_straight = PCLines_straight_all(lines / np.tile([W, H], [L, 2]), 'straight')
-        points_twisted = PCLines_straight_all(lines / np.tile([W, H], [L, 2]), 'twisted')
+        points_straight = np.vstack(PCLines_straight_all(lines / np.tile([W, H], [L, 2]), 'straight')).T
+        points_twisted = np.vstack(PCLines_straight_all(lines / np.tile([W, H], [L, 2]), 'twisted')).T
 
         # 3) impose boundaries of PClines space
         # Ihe CVPR paper uses a domain in the twisted space between [-2, 1]x[-2, 1]
         # Instead, this version uses [-2, 1]x[-1.5 1.5], which is more consistent with the transform (see IPOL article)
-        z1 = points_straight[:, 0] > 2 or points_straight[:, 1] > 2 or points_straight[:, 0] < -1 or \
-             points_straight[:, 1] < -1 or np.isnan(points_straight[:, 0]) or np.isnan(points_straight[:, 1])
+        z1 = (points_straight[:, 0] > 2) | (points_straight[:, 1] > 2) | (points_straight[:, 0] < -1) | \
+             (points_straight[:, 1] < -1) | np.isnan(points_straight[:, 0]) | np.isnan(points_straight[:, 1])
 
-        z2 = points_twisted[:, 0] > 1 or points_twisted[:, 1] > 1.5 or points_twisted[:, 0] < -2 or \
-             points_twisted[:, 1] < -1.5 or np.isnan(points_twisted[:, 0]) or np.isnan(points_twisted[:, 1])
+        z2 = (points_twisted[:, 0] > 1) | (points_twisted[:, 1] > 1.5) | (points_twisted[:, 0] < -2) | \
+             (points_twisted[:, 1] < -1.5) | np.isnan(points_twisted[:, 0]) | np.isnan(points_twisted[:, 1])
 
-        return points_straight[z1], points_twisted[z2]
+        return points_straight[~z1], points_twisted[~z2]
 
     def _read_detections_as_vps(self, detections_straight: np.ndarray, m1: np.ndarray, b1: np.ndarray,
                                 detections_twisted: np.ndarray, m2: np.ndarray, b2: np.ndarray) -> tuple:

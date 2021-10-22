@@ -180,6 +180,7 @@ class TestVanishingPointDetector(object):
         assert np.all(np.abs(Y - Y_out) < 1e-2)
 
     def test__compute_horizon_line_non_manhattan(self):
+        # 0) load and declare input and output parameters
         lines_lsd_in = np.loadtxt(join(data_folder, 'test__denoise_lines__lines_in.txt'), delimiter=',')
         Y_out = np.loadtxt(join(data_folder, 'test__compute_horizon_line_non_manhattan_Y_out.txt'), delimiter=',')
         mvp_all_in = np.array([[801.086571010609, 253.069911493031, 445.753039751043, -1135.90886157744,
@@ -209,6 +210,24 @@ class TestVanishingPointDetector(object):
         assert np.all(np.abs(vpimg - vpimg_out) < 1e-12)
         assert np.all(np.abs(Y - Y_out) < 1e-1)
 
+    def test__convert_to_PClines(self):
+        # 0) load and declare input and output parameters
+        lines_in = np.loadtxt(join(data_folder, 'test__convert_to_PClines_lines_in.txt'), delimiter=',')
+        points_straight_out = np.loadtxt(join(data_folder, 'test__convert_to_PClines_points_straight_out.txt'),
+                                         delimiter=',')
+        points_twisted_out = np.loadtxt(join(data_folder, 'test__convert_to_PClines_points_twisted_out.txt'),
+                                        delimiter=',')
+        vpd = VanishingPointDetector()
+        vpd.runtime_params.H = 612
+        vpd.runtime_params.W = 816
+
+        # 1) run function
+        points_straight, points_twisted = vpd._convert_to_PClines(lines_in)
+
+        # 2) compare results
+        assert np.all(np.abs(points_straight - points_straight_out) < 1e-12)
+        assert np.all(np.abs(points_twisted - points_twisted_out) < 1e-12)
+
     def test__detect_vps(self):
 
         # 0) define input data (image)
@@ -224,10 +243,11 @@ class TestVanishingPointDetector(object):
         vpd = VanishingPointDetector()
 
         # 2) run the algorithm
-        horizon = vpd.detect_vps(image_in, folder_out=output_dir, manhattan=False,
-                                 acceleration=True, focal_ratio=1.08, plot=True, print_output=True)
+        horizon, vpimg = vpd.detect_vps(image_in, folder_out=output_dir, manhattan=False,
+                                        acceleration=True, focal_ratio=1.08, plot=True, print_output=True)
 
         # 3) assert results are correct
+        print("OK")
 
 
 class TestVanishingPointDetectorDrawingFunctions(object):
