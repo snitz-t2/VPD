@@ -311,5 +311,19 @@ class TestVanishingPointDetectorDrawingFunctions(object):
         BW = BW.reshape(BW_out.shape, order='F')
         assert np.all(BW == BW_out)
 
+    def test__draw_segments(self):
+        # 0) load and declare input and output parameters
+        lines_in = np.loadtxt(join(data_folder, 'test__denoise_lines__lines_in.txt'), delimiter=',')
+        img_in = cv2.cvtColor(cv2.imread(join(data_folder, 'test.jpg'), -1), cv2.COLOR_BGR2RGB)
+        vpimg_in = np.array([[800.894333585489, 345.968434441128, -949.742287440140, 799.834641087275, 408.125435891671],
+                             [268.808002590910, 18339.9731893547, 263.862166183153, 268.829479610743, 10760.8963609918]])
+        vpd = VanishingPointDetector()
+        vpd.runtime_params.H = 612
+        vpd.runtime_params.W = 816
+
+        # 1) run the function
+        img2 = vpd._draw_segments(img_in, vpimg_in, lines_in)
+
+        print("OK")
 
 

@@ -25,10 +25,10 @@ class VanishingPointDetector:
         self.figures = []
 
     def GetConfig(self, as_string: bool = False) -> dict or str:
-        return self.params.GetConfig(as_string)
+        return self.default_params.GetConfig(as_string)
 
     def SetConfig(self, params_in: dict) -> None:
-        self.params.SetConfig(params_in)
+        self.default_params.SetConfig(params_in)
 
     def detect_vps(self,
                    img_in: str,
@@ -118,29 +118,6 @@ class VanishingPointDetector:
         print("Finished")
         return horizon_line, vpimg
 
-    def _draw_lines(self, lines1: np.ndarray, lines2: np.ndarray) -> None:
-        raise NotImplementedError
-        H = self.runtime_params.H
-        W = self.runtime_params.W
-        LW = 1.5
-
-        fig = plt.figure()
-        ax2d = fig.add_subplots()
-
-        for ii in range(len(lines1)):
-            l = lines1[ii, :]
-            ax2d.plot(l[::2], H - l[1::2], linewidth=LW)
-
-        for ii in range(len(lines2)):
-            l = lines2[ii, :]
-            ax2d.plot(l[::2], H - l[1::2], 'r', linewidth=LW)
-
-    def _draw_segments(self, img: np.ndarray, mvp_all: np.ndarray, lines_lsd: np.ndarray) -> None:
-        raise NotImplementedError
-
-    def _draw_dual_spaces(self, points, detections, space, vpimg):
-        raise NotImplementedError
-
     def _convert_to_PClines(self, lines: np.ndarray) -> tuple:
         """
         Converts lines in the image to PCLines "straight" and "twisted" spaces
@@ -177,13 +154,20 @@ class VanishingPointDetector:
         converts alignment detections to vanishing points in the image.
         returns mvp_all, a list of vanishing points and NFAs, their corresponding -log10(true NFA).
         TODO: complete doc
-        :param detections_straight: A D1x6 numpy array (float).
-        :param m1: A D1-length numpy array (float).
-        :param b1: A D1-length numpy array (float).
-        :param detections_twisted:
-        :param m2:
-        :param b2:
-        :return:
+        :param detections_straight: A D1x6 numpy array (float),
+                                    where `D1` is the number of detection in the `straight` dual space`.
+        :param m1: A D1x1 numpy array (float).
+        :param b1: A D1x1 numpy array (float).
+        :param detections_twisted: A D2x6 numpy array (float),
+                                   where `D2` is the number of detection in the `twisted` dual space`.
+        :param m2: A D2x1 numpy array (float).
+        :param b2: A D2x1 numpy array (float).
+        :return: a 2-length tuple with the following outputs:
+                 - mvp_all: a 2x(D1+D2) numpy array, where every column represents a
+                            potential vanishing point in the image space.
+                 - NFAs: a (D1_D2)x1 numpy array, where each number represents the number NFA number for each VP.
+                 Note: the actual returned number of VPs can be smaller than the nuber of detections (D1+D2) if some
+                       of the detections are nan.
         """
         # 0) get runtime parameters
         H = self.runtime_params.H
@@ -559,6 +543,143 @@ class VanishingPointDetector:
         b = -l[0, 2] / l[0, 1]
         return m, b
 
+    def _draw_segments(self, img, vpimg, lines, draw_dashed=False):
+        """
+        Overlays line segments and vanishing directions on image.
+        :param img: An RGB(not BGR!!!!) or grayscale image, as a three or two dimensional numpy array.
+        :param vpimg: A 2xV numpy array, which represent the
+                      detected vanishing points in image space (V is the number of points).
+        :param lines: Detected lines from the LSD algorithm [x1 y1 x2 y2].
+        :param draw_dashed: bool. If True, the function will draw the dashed lines for each segment.
+        :return: img2: an RGB numpy array HxWx3, with lines marked on them, each line has a color.
+                       lines with the same color intersect at the same vanishing point.
+        """
+        # TODO: fix the bug where extra dashed lines appear where they should not
+        img2 = deepcopy(img)
+        H = self.runtime_params.H
+        W = self.runtime_params.W
+        THRESHOLD = self.default_params.REFINE_THRESHOLD
+        Z = lines.shape[0]  # number of lines
+        V = vpimg.shape[1]  # number of vanishing points
+
+        # get colomap
+        colors = plt.cm.hsv(np.linspace(0, 1, V+1))
+
+        # create an empty "image" for each vanishing points
+        zi = np.zeros((V, H, W))
+        zi2 = np.zeros((V, H, W))
+
+        assign = np.ones((Z, V)) * np.inf
+
+        for ii in range(V):
+            vp = vpimg[:, ii]
+
+            mp = np.vstack([lines[:, 0] + (lines[:, 2] - lines[:, 0]) / 2, lines[:, 1] + (lines[:, 3] - lines[:, 1]) / 2]).T
+
+            L = lines.shape[0]
+            O = np.ones((L, 1))
+            Z = np.zeros((L, 1))
+            vpmat = np.tile(vp, [L, 1])
+
+            VP = np.cross(np.hstack([mp, O]), np.hstack([vpmat, O]))
+            VP3 = np.tile(VP[:, 2][:, np.newaxis], [1, 3])
+            VP /= VP3
+
+            a = VP[:, 0][:, np.newaxis]
+            b = VP[:, 1][:, np.newaxis]
+
+            # get angle between lines
+            lt2 = np.hstack([Z, -np.reciprocal(b), W * O, -W * a * np.reciprocal(b) - np.reciprocal(b)])
+            A = lines[:, 2:] - lines[:, :2]
+            B = lt2[:, 2:] - lt2[:, :2]
+            normA = np.sqrt(A[:, 0] ** 2 + A[:, 1] ** 2)[:, np.newaxis]
+            normB = np.sqrt(B[:, 0] ** 2 + B[:, 1] ** 2)[:, np.newaxis]
+            A /= np.tile(normA, [1, 2])
+            B /= np.tile(normB, [1, 2])
+
+            angle = np.arccos(np.sum(A.T * B.T, axis=0))
+            angle = np.real(angle)  # numerical errors
+            angle = np.minimum(angle, np.pi - angle)
+            angle = np.rad2deg(angle)
+            assign[:, ii] = angle
+
+        # find best fitting vp for each line, but only those under the threshold
+        I = np.argmin(assign.T, axis=0)
+        angles = np.min(assign.T, axis=0)
+        z = np.where(angles < THRESHOLD)[0]
+
+        for ii in range(len(z)):
+            lt = lines[z[ii], :]
+            l, _ = self._drawline(np.array([[lt[1], lt[0]]]), np.array([[lt[3], lt[2]]]), H, W)
+            zi_ii = zi[I[z[ii]]].ravel(order='F')
+            zi_ii[l] = 1
+            zi[I[z[ii]]] = zi_ii.reshape(zi[I[z[ii]]].shape, order='F')
+
+            # draw dashed lines (or not)
+            if draw_dashed:
+                a = (lt[3] - lt[1]) / (lt[2] - lt[0])
+                b = lt[1] - a * lt[0]
+                ang = np.arctan(a)
+
+                if np.abs(np.rad2deg(ang)) > 45 | np.isnan(ang):
+                    # inverse stuff
+                    Y = np.arange(H)
+                    S = 3
+                    z0 = np.where(np.mod(Y, S) < 1)
+                    Y = np.round(Y[z0] + np.mod(lt[1], S))
+                    X = np.round((Y - b) / a)
+                else:
+                    X = np.arange(W)
+                    S = 5
+                    z0 = np.where(np.mod(Y, S) < 1)
+                    X = np.round(X[z0] + np.mod(lt[0], S))
+                    Y = np.round(X * a + b)
+                z1 = np.where((Y >= 0) & (Y <= (H-1)) & (X >= 0) & (X <= (W-1)))
+                z2 = np.ravel_multi_index(Y[z1], X[z1], [H, W])
+                zi2_ii = zi2[I[z[ii]]].ravel(order='F')
+                zi2_ii[l] = 1
+                zi2[I[z[ii]]] = zi2_ii.reshape(zi[I[z[ii]]].shape, order='F')
+
+        if len(img2.shape) == 2:
+            img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2RGB)
+
+        red = img2[:, :, 0]
+        green = img2[:, :, 1]
+        blue = img2[:, :, 2]
+
+        # make lines fatter
+        se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        for ii in range(V):
+            zi[ii] = cv2.dilate(zi[ii], se)
+            red[zi[ii].astype(bool)] = colors[ii, 0] * 255
+            green[zi[ii].astype(bool)] = colors[ii, 1] * 255
+            blue[zi[ii].astype(bool)] = colors[ii, 2] * 255
+            red[zi2[ii].astype(bool)] = colors[ii, 0] * 255
+            green[zi2[ii].astype(bool)] = colors[ii, 1] * 255
+            blue[zi2[ii].astype(bool)] = colors[ii, 2] * 255
+
+        return img2
+
+    def _draw_lines(self, lines1: np.ndarray, lines2: np.ndarray) -> None:
+        raise NotImplementedError
+        # H = self.runtime_params.H
+        # W = self.runtime_params.W
+        # LW = 1.5
+        #
+        # fig = plt.figure()
+        # ax2d = fig.add_subplots()
+        #
+        # for ii in range(len(lines1)):
+        #     l = lines1[ii, :]
+        #     ax2d.plot(l[::2], H - l[1::2], linewidth=LW)
+        #
+        # for ii in range(len(lines2)):
+        #     l = lines2[ii, :]
+        #     ax2d.plot(l[::2], H - l[1::2], 'r', linewidth=LW)
+
+    def _draw_dual_spaces(self, points, detections, space, vpimg):
+        raise NotImplementedError
+
     @staticmethod
     def _aggclus(X: np.ndarray, THRESHOLD: float) -> list:
         """
@@ -667,7 +788,6 @@ class VanishingPointDetector:
         vpimg[1, :] = H - vpimg[1, :]
         return vpimg
 
-
     @staticmethod
     def _orthogonal_triplet(my_vps: np.ndarray, NFAs: np.ndarray, ORTHOGONALITY_THRESHOLD: float):
         """
@@ -749,8 +869,6 @@ class VanishingPointDetector:
             ortho_vps = np.array([my_vps[:, triplet[0]], my_vps[:, triplet[1]], my_vps[:, triplet[2]]]).T
 
         return ortho_vps
-
-
 
     @staticmethod
     def _drawline(p1: np.ndarray, p2: np.ndarray, M: int, N: int) -> tuple:
@@ -900,10 +1018,10 @@ class VanishingPointDetector:
                     iter += 1
                 alpha = np.round(np.array(alpha[:-1])).astype(int)
                 beta = np.round(np.array(beta[:-1])).astype(int)
-                ind = np.append(ind, np.ravel_multi_index((alpha, beta), (N, M), order='F'))
+                ind = np.append(ind, np.ravel_multi_index((alpha, beta), (M, N), order='F'))
                 label = np.append(label, line_number * np.ones(len(alpha), dtype=int))
             if abs(v[0]) < abs(v[1]):
-                alpha = [p_in[1, 0, 0]]
+                alpha = [p_in[1, 0]]
                 beta = [p_in[0, 0]]
                 iter = 0
                 while col_range[0] <= alpha[iter] <= col_range[1] and row_range[0] <= beta[iter] <= row_range[1]:
@@ -912,7 +1030,7 @@ class VanishingPointDetector:
                     iter += 1
                 alpha = np.round(np.array(alpha[:-1])).astype(int)
                 beta = np.round(np.array(beta[:-1])).astype(int)
-                ind = np.append(ind, np.ravel_multi_index((beta, alpha), (N, M), order='F'))
+                ind = np.append(ind, np.ravel_multi_index((beta, alpha), (M, N), order='F'))
                 label = np.append(label, line_number * np.ones(len(alpha), dtype=int))
             del alpha, beta
             continue
