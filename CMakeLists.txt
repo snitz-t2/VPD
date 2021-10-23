@@ -3,19 +3,24 @@ cmake_minimum_required(VERSION 3.16.4 FATAL_ERROR)
 # define project name
 project(VPD_libs)
 
-# find the matlab engine installation
+# find the matlab engine installation, which is optional
 find_package(Matlab)
 
-# add the mex project for the LSD lib
-matlab_add_mex(NAME lsd SRC ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lsd.c ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lsd.h)
+if (Matlab_FOUND)
+    # add the mex project for the LSD lib
+    matlab_add_mex(NAME lsd SRC ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lsd.c ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lsd.h)
+    
+    # glob the source files for alignment libraries
+    file(GLOB_RECURSE INCLUDE_FILES ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lib/*.h)
+    file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lib/*.c)
+    
+    # add the mex projects for both alignment libraries
+    matlab_add_mex(NAME alignments_slow SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_slow.cpp)
+    matlab_add_mex(NAME alignments_fast SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_fast.cpp)
+endif()
 
-# glob the source files for alignment libraries
-file(GLOB_RECURSE INCLUDE_FILES ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lib/*.h)
-file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/lib/*.c)
-
-# add the mex projects for both alignment libraries
-matlab_add_mex(NAME alignments_slow SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_slow.cpp)
-matlab_add_mex(NAME alignments_fast SRC ${INCLUDE_FILES} ${SOURCE_FILES} ${CMAKE_CURRENT_LIST_DIR}/VPdetection-CVPR14/mex_files/alignments_fast.cpp)
+# find the python installation, which is required for the project to compile
+find_package(Python REQUIRED)
 
 # add the pybind11 projects for both alignment libraries
 add_subdirectory(pybind11)
